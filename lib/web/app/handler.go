@@ -144,6 +144,8 @@ func NewHandler(ctx context.Context, c *HandlerConfig) (*Handler, error) {
 	h.router.UseRawPath = true
 	h.router.GET("/x-teleport-auth", makeRouterHandler(h.startAppAuthExchange))
 	h.router.POST("/x-teleport-auth", makeRouterHandler(h.completeAppAuthExchange))
+	// TODO (avatus) this is not active until we send the dbsc headers in app auth
+	h.router.POST(dbscRegistrationPath, makeRouterHandler(h.handleDBSCRegistration))
 	h.router.GET("/teleport-logout", h.withRouterAuth(h.handleLogout))
 	h.router.NotFound = h.withAuth(h.handleHttp)
 
