@@ -97,6 +97,7 @@ type Services struct {
 	services.ScopedTokenService
 	MFAService
 	services.WorkloadClusterService
+	services.Beams
 }
 
 // MFAService defines the interface for managing MFA resources in the backend.

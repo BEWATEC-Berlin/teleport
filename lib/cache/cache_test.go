@@ -45,6 +45,7 @@ import (
 	accessmonitoringrulesv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/accessmonitoringrules/v1"
 	appauthconfigv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/appauthconfig/v1"
 	"github.com/gravitational/teleport/api/gen/proto/go/teleport/autoupdate/v1"
+	beamsv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/beams/v1"
 	clusterconfigpb "github.com/gravitational/teleport/api/gen/proto/go/teleport/clusterconfig/v1"
 	crownjewelv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/crownjewel/v1"
 	dbobjectv1 "github.com/gravitational/teleport/api/gen/proto/go/teleport/dbobject/v1"
@@ -167,6 +168,7 @@ type testPack struct {
 	pluginStaticCredentials *local.PluginStaticCredentialsService
 	gitServers              *local.GitServerService
 	workloadIdentity        *local.WorkloadIdentityService
+	beams                   *local.BeamService
 	healthCheckConfig       *local.HealthCheckConfigService
 	botInstanceService      *local.BotInstanceService
 	recordingEncryption     *local.RecordingEncryptionService
@@ -462,6 +464,12 @@ func newPackWithoutCache(dir string, opts ...packOption) (*testPack, error) {
 	}
 	p.workloadIdentity = workloadIdentitySvc
 
+	beamSvc, err := local.NewBeamService(p.backend)
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	p.beams = beamSvc
+
 	databaseObjectsSvc, err := local.NewDatabaseObjectService(p.backend)
 	if err != nil {
 		return nil, trace.Wrap(err)
@@ -565,6 +573,7 @@ func newPack(t testing.TB, setupConfig func(c Config) Config, opts ...packOption
 		AppSession:              p.appSessionS,
 		WebSession:              p.webSessionS,
 		WebToken:                p.webTokenS,
+		Beams:                   p.beams,
 		SnowflakeSession:        p.snowflakeSessionS,
 		Restrictions:            p.restrictions,
 		Apps:                    p.apps,
@@ -838,6 +847,7 @@ func TestCompletenessInit(t *testing.T) {
 			WebSession:              p.webSessionS,
 			SnowflakeSession:        p.snowflakeSessionS,
 			WebToken:                p.webTokenS,
+			Beams:                   p.beams,
 			Restrictions:            p.restrictions,
 			Apps:                    p.apps,
 			Kubernetes:              p.kubernetes,
@@ -929,6 +939,7 @@ func TestCompletenessReset(t *testing.T) {
 		WebSession:              p.webSessionS,
 		SnowflakeSession:        p.snowflakeSessionS,
 		WebToken:                p.webTokenS,
+		Beams:                   p.beams,
 		Restrictions:            p.restrictions,
 		Apps:                    p.apps,
 		Kubernetes:              p.kubernetes,
@@ -1095,6 +1106,7 @@ func TestListResources_NodesTTLVariant(t *testing.T) {
 		WebSession:              p.webSessionS,
 		WebToken:                p.webTokenS,
 		SnowflakeSession:        p.snowflakeSessionS,
+		Beams:                   p.beams,
 		Restrictions:            p.restrictions,
 		Apps:                    p.apps,
 		Kubernetes:              p.kubernetes,
@@ -1198,6 +1210,7 @@ func initStrategy(t *testing.T) {
 		SnowflakeSession:        p.snowflakeSessionS,
 		WebSession:              p.webSessionS,
 		WebToken:                p.webTokenS,
+		Beams:                   p.beams,
 		Restrictions:            p.restrictions,
 		Apps:                    p.apps,
 		Kubernetes:              p.kubernetes,
@@ -1958,6 +1971,7 @@ func TestCacheWatchKindExistsInEvents(t *testing.T) {
 		types.KindAccessMonitoringRule:              types.Resource153ToLegacy(newAccessMonitoringRule(t, "test")),
 		types.KindCrownJewel:                        types.Resource153ToLegacy(newCrownJewel(t, "test")),
 		types.KindDatabaseObject:                    types.Resource153ToLegacy(newDatabaseObject(t, "test")),
+		types.KindBeam:                              types.Resource153ToLegacy(newBeamResource("some-beam", "curious-harbor", clock.Now().Add(time.Hour))),
 		types.KindAccessGraphSettings:               types.Resource153ToLegacy(newAccessGraphSettings(t)),
 		types.KindSPIFFEFederation:                  types.Resource153ToLegacy(newSPIFFEFederation("test")),
 		types.KindStaticHostUser:                    types.Resource153ToLegacy(newStaticHostUser(t, "test")),
@@ -2058,6 +2072,8 @@ func TestCacheWatchKindExistsInEvents(t *testing.T) {
 					require.Empty(t, cmp.Diff(resource.(types.Resource153UnwrapperT[*appauthconfigv1.AppAuthConfig]).UnwrapT(), uw.UnwrapT(), protocmp.Transform()))
 				case types.Resource153UnwrapperT[*workloadclusterv1.WorkloadCluster]:
 					require.Empty(t, cmp.Diff(resource.(types.Resource153UnwrapperT[*workloadclusterv1.WorkloadCluster]).UnwrapT(), uw.UnwrapT(), protocmp.Transform()))
+				case types.Resource153UnwrapperT[*beamsv1.Beam]:
+					require.Empty(t, cmp.Diff(resource.(types.Resource153UnwrapperT[*beamsv1.Beam]).UnwrapT(), uw.UnwrapT(), protocmp.Transform()))
 				default:
 					require.Empty(t, cmp.Diff(resource, event.Resource))
 				}
