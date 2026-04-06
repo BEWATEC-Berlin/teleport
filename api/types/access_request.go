@@ -181,7 +181,12 @@ func NewAccessRequestWithResources(name string, user string, roles []string, res
 	return &req, nil
 }
 
+// IsEqual determines if two access requests are equivalent to one another.
 func (r *AccessRequestV3) IsEqual(other AccessRequest) bool {
+	if r == nil && other == nil {
+		return true
+	}
+
 	otherv3, ok := other.(*AccessRequestV3)
 	if !ok {
 		return false
@@ -189,10 +194,6 @@ func (r *AccessRequestV3) IsEqual(other AccessRequest) bool {
 
 	if !deriveTeleportEqualAccessRequestV3(r, otherv3) {
 		return false
-	}
-
-	if r == nil && otherv3 == nil {
-		return true
 	}
 
 	// The derived equality function skips RequestedResourceAccessIDs entirely
@@ -237,7 +238,7 @@ func resourceAccessIDEqual(a, b *ResourceAccessID) bool {
 // this must be done manually.
 func resourceConstraintsDetailsEqual(a, b *ResourceConstraints) bool {
 	if a == nil || b == nil {
-		return a == nil && b == nil
+		return a == b
 	}
 	switch av := a.Details.(type) {
 	case *ResourceConstraints_AwsConsole:

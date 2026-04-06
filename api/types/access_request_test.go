@@ -17,6 +17,9 @@ limitations under the License.
 package types
 
 import (
+	"fmt"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -240,8 +243,7 @@ func TestAccessRequestV3IsEqual(t *testing.T) {
 				return r
 			},
 			b: func(t *testing.T) AccessRequest {
-				var r *AccessRequestV3
-				return r
+				return nil
 			},
 			want: true,
 		},
@@ -503,4 +505,98 @@ func TestAccessRequestV3IsEqual(t *testing.T) {
 			require.Equal(t, tt.want, a.IsEqual(b))
 		})
 	}
+}
+
+// TestResourceConstraintsDetailsExhaustive ensures that resourceConstraintsDetailsEqual
+// handles all ResourceConstraints.Details oneof variants. If a new variant is added
+// to the proto but not resourceConstraintsDetailsEqual, then the test will fail because the
+// function returns false for two identical unknown and non-nil Details types.
+func TestResourceConstraintsDetailsExhaustive(t *testing.T) {
+	var constraints *ResourceConstraints
+	for _, w := range constraints.XXX_OneofWrappers() {
+		wrapperType := reflect.TypeOf(w).Elem()
+		t.Run(wrapperType.Name(), func(t *testing.T) {
+			// Create two ResourceConstraints with identical Details for
+			// the current OneOf type.
+			rcA := populateResourceConstraintsDetails(t, wrapperType, 1)
+			rcB := populateResourceConstraintsDetails(t, wrapperType, 1)
+
+			// Validate that they are not nil.
+			require.NotNil(t, rcA.Details)
+			require.NotNil(t, rcB.Details)
+
+			// Validate that they are equivalent.
+			require.True(t, resourceConstraintsDetailsEqual(rcA, rcB))
+
+			// Validate that a populated constraint and a nil constraint are not equal.
+			require.False(t, resourceConstraintsDetailsEqual(rcA, &ResourceConstraints{}))
+
+			// Validate that two ResourceConstraints with the same Details type, but
+			// different values are not equivalent.
+			rcC := populateResourceConstraintsDetails(t, wrapperType, 2)
+			require.False(t, resourceConstraintsDetailsEqual(rcA, rcC))
+		})
+	}
+}
+
+// populateResourceConstraintsDetails returns a ResourceConstraints that has the Details
+// field set to a fully populated OneOf variant based on the provided seed. The value
+// returned will always be identical for the same type and seed.
+func populateResourceConstraintsDetails(t *testing.T, detailsType reflect.Type, seed int) *ResourceConstraints {
+	t.Helper()
+
+	wrapper := reflect.New(detailsType).Elem()
+	for i := range detailsType.NumField() {
+		wf := wrapper.Field(i)
+		if !wf.CanSet() || strings.HasPrefix(detailsType.Field(i).Name, "XXX_") {
+			continue
+		}
+
+		require.Equal(t, reflect.Pointer, wf.Kind(), "unexpected non-pointer field %s in %s oneof", detailsType.Field(i).Name, detailsType.Name())
+
+		inner := reflect.New(wf.Type().Elem())
+		innerElem := inner.Elem()
+		for j := range innerElem.NumField() {
+			sf := innerElem.Type().Field(j)
+			f := innerElem.Field(j)
+			if !f.CanSet() || strings.HasPrefix(sf.Name, "XXX_") {
+				continue
+			}
+
+			switch f.Kind() {
+			case reflect.String:
+				f.SetString(fmt.Sprintf("value-%d", seed))
+			case reflect.Bool:
+				f.SetBool(seed%2 == 0)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				f.SetInt(int64(seed))
+			case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+				f.SetUint(uint64(seed))
+			case reflect.Float32, reflect.Float64:
+				f.SetFloat(float64(seed))
+			case reflect.Slice:
+				elem := reflect.New(f.Type().Elem()).Elem()
+				switch elem.Kind() {
+				case reflect.String:
+					elem.SetString(fmt.Sprintf("value-%d", seed))
+				case reflect.Bool:
+					elem.SetBool(seed%2 == 0)
+				case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+					elem.SetInt(int64(seed))
+				case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+					elem.SetUint(uint64(seed))
+				case reflect.Float32, reflect.Float64:
+					elem.SetFloat(float64(seed))
+				default:
+					t.Fatalf("unhandled slice element type %s in field %s", elem.Kind(), sf.Name)
+				}
+				f.Set(reflect.Append(f, elem))
+			default:
+				t.Fatalf("unhandled kind %s for field %s", f.Kind(), sf.Name)
+			}
+		}
+		wf.Set(inner)
+	}
+
+	return &ResourceConstraints{Details: wrapper.Addr().Interface().(isResourceConstraints_Details)}
 }
