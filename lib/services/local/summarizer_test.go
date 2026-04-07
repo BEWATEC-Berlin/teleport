@@ -862,7 +862,7 @@ func TestSummarizerService_CreateRetrievalModel(t *testing.T) {
 		got, err := service.CreateRetrievalModel(
 			ctx,
 			// Clone to avoid Marshaling modifying want
-			proto.Clone(want).(*summarizerv1.RetrievalModel),
+			proto.CloneOf(want),
 		)
 		require.NoError(t, err)
 		assert.NotEmpty(t, got.Metadata.Revision)
@@ -879,7 +879,7 @@ func TestSummarizerService_CreateRetrievalModel(t *testing.T) {
 		m.Spec.GetOpenai().OpenaiModelId = ""
 		_, err := service.CreateRetrievalModel(
 			ctx,
-			proto.Clone(m).(*summarizerv1.RetrievalModel),
+			proto.CloneOf(m),
 		)
 		require.Error(t, err)
 		assert.ErrorIs(t, err, trace.BadParameter("spec.embeddings_provider.openai.openai_model_id is required"))
@@ -890,13 +890,13 @@ func TestSummarizerService_CreateRetrievalModel(t *testing.T) {
 		_, err := service.CreateRetrievalModel(
 			ctx,
 			// Clone to avoid Marshaling modifying want
-			proto.Clone(res).(*summarizerv1.RetrievalModel),
+			proto.CloneOf(res),
 		)
 		require.NoError(t, err)
 		_, err = service.CreateRetrievalModel(
 			ctx,
 			// Clone to avoid Marshaling modifying want
-			proto.Clone(res).(*summarizerv1.RetrievalModel),
+			proto.CloneOf(res),
 		)
 		require.Error(t, err)
 		assert.True(t, trace.IsAlreadyExists(err))
@@ -906,7 +906,7 @@ func TestSummarizerService_CreateRetrievalModel(t *testing.T) {
 func TestSummarizerService_CreateRetrievalModel_BedrockAllowed(t *testing.T) {
 	// Perform a similar setup procedure, but enable Bedrock.
 	t.Parallel()
-	ctx := context.Background()
+	ctx := t.Context()
 	clock := clockwork.NewFakeClock()
 	mem, err := memory.New(memory.Config{
 		Context: ctx,
@@ -932,7 +932,7 @@ func TestSummarizerService_CreateRetrievalModel_BedrockAllowed(t *testing.T) {
 	got, err := service.CreateRetrievalModel(
 		ctx,
 		// Clone to avoid Marshaling modifying want
-		proto.Clone(want).(*summarizerv1.RetrievalModel),
+		proto.CloneOf(want),
 	)
 	require.NoError(t, err)
 	assert.NotEmpty(t, got.Metadata.Revision)
@@ -951,7 +951,7 @@ func TestSummarizerService_UpsertRetrievalModel(t *testing.T) {
 	got, err := service.UpsertRetrievalModel(
 		ctx,
 		// Clone to avoid Marshaling modifying want
-		proto.Clone(want).(*summarizerv1.RetrievalModel),
+		proto.CloneOf(want),
 	)
 	require.NoError(t, err)
 	assert.NotEmpty(t, got.Metadata.Revision)
@@ -966,7 +966,7 @@ func TestSummarizerService_UpsertRetrievalModel(t *testing.T) {
 	_, err = service.UpsertRetrievalModel(
 		ctx,
 		// Clone to avoid Marshaling modifying want
-		proto.Clone(want).(*summarizerv1.RetrievalModel),
+		proto.CloneOf(want),
 	)
 	require.NoError(t, err)
 }
@@ -978,7 +978,7 @@ func TestSummarizerService_GetRetrievalModel(t *testing.T) {
 		_, err := service.CreateRetrievalModel(
 			ctx,
 			// Clone to avoid Marshaling modifying want
-			proto.Clone(want).(*summarizerv1.RetrievalModel),
+			proto.CloneOf(want),
 		)
 		require.NoError(t, err)
 		got, err := service.GetRetrievalModel(ctx)
@@ -1036,13 +1036,13 @@ func TestSummarizerService_UpdateRetrievalModel(t *testing.T) {
 			newRetrievalModel(),
 		)
 		require.NoError(t, err)
-		want := proto.Clone(created).(*summarizerv1.RetrievalModel)
+		want := proto.CloneOf(created)
 		want.Spec.GetOpenai().BaseUrl = "https://localhost:4000"
 
 		updated, err := service.UpdateRetrievalModel(
 			ctx,
 			// Clone to avoid Marshaling modifying want
-			proto.Clone(want).(*summarizerv1.RetrievalModel),
+			proto.CloneOf(want),
 		)
 		require.NoError(t, err)
 		assert.NotEqual(t, created.Metadata.Revision, updated.Metadata.Revision)
