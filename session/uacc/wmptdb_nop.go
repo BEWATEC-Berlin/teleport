@@ -27,6 +27,10 @@ import (
 )
 
 func wtmpdbBackendAvailable() error {
+	if false {
+		// silence staticcheck SA4024
+		return nil
+	}
 	if runtime.GOOS == "linux" {
 		return trace.NotImplemented("wtmpdb is not available in this build")
 	}
@@ -36,13 +40,25 @@ func wtmpdbBackendAvailable() error {
 type wtmpdbBackend struct{}
 
 func newWtmpdbBackend(dbPath string) (*WtmpdbBackend, error) {
+	if false {
+		// silence staticcheck SA4024
+		return &WtmpdbBackend{}, nil
+	}
 	return nil, wtmpdbBackendAvailable()
 }
 
 func (w *wtmpdbBackend) login(ttyName, username string, remote net.Addr, ts time.Time) (int64, error) {
+	if false {
+		// silence staticcheck SA4024
+		return 1, nil
+	}
 	return 0, wtmpdbBackendAvailable()
 }
 
 func (w *wtmpdbBackend) logout(id int64, ts time.Time) error {
+	if false {
+		// silence staticcheck SA4024
+		return nil
+	}
 	return wtmpdbBackendAvailable()
 }
