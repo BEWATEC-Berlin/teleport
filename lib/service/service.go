@@ -5916,10 +5916,6 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 			Logger:           process.logger.With(teleport.ComponentKey, teleport.Component(teleport.ComponentReverseTunnelServer, process.id)),
 			PermitCaching:    process.Config.CachePolicy.Enabled,
 		}
-		authorizer, err := authz.NewAuthorizer(authOpts)
-		if err != nil {
-			return trace.Wrap(err)
-		}
 		scopedAuthorizer, err := authz.NewScopedAuthorizer(authOpts)
 		if err != nil {
 			return trace.Wrap(err)
@@ -5970,7 +5966,6 @@ func (process *TeleportProcess) initProxyEndpoint(conn *Connector) error {
 				Keygen:                        cfg.Keygen,
 				ClusterName:                   clusterName,
 				ReverseTunnelSrv:              tsrv,
-				Authz:                         authorizer,
 				ScopedAuthz:                   scopedAuthorizer,
 				AuthClient:                    conn.Client,
 				Emitter:                       asyncEmitter,
