@@ -6101,6 +6101,85 @@ func (c *Client) UpdateScopedToken(ctx context.Context, token *joiningv1.ScopedT
 	return res.GetToken(), trace.Wrap(err)
 }
 
+// GetScopedRole gets a scoped role by name.
+func (c *Client) GetScopedRole(ctx context.Context, name string) (*scopedaccessv1.ScopedRole, error) {
+	res, err := c.ScopedAccessServiceClient().GetScopedRole(ctx, &scopedaccessv1.GetScopedRoleRequest{
+		Name: name,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return res.GetRole(), nil
+}
+
+// CreateScopedRole creates a new scoped role.
+func (c *Client) CreateScopedRole(ctx context.Context, role *scopedaccessv1.ScopedRole) (*scopedaccessv1.ScopedRole, error) {
+	res, err := c.ScopedAccessServiceClient().CreateScopedRole(ctx, &scopedaccessv1.CreateScopedRoleRequest{
+		Role: role,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return res.GetRole(), nil
+}
+
+// UpsertScopedRole upserts an existing scoped role.
+func (c *Client) UpsertScopedRole(ctx context.Context, role *scopedaccessv1.ScopedRole) (*scopedaccessv1.ScopedRole, error) {
+	res, err := c.ScopedAccessServiceClient().UpsertScopedRole(ctx, &scopedaccessv1.UpsertScopedRoleRequest{
+
+		Role: role,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return res.GetRole(), nil
+}
+
+// DeleteScopedRole deletes a scoped role by name.
+func (c *Client) DeleteScopedRole(ctx context.Context, name string) error {
+	_, err := c.ScopedAccessServiceClient().DeleteScopedRole(ctx, &scopedaccessv1.DeleteScopedRoleRequest{
+		Name: name,
+	})
+	return trace.Wrap(err)
+}
+
+// GetScopedRoleAssignment gets a scoped role assignment by name.
+func (c *Client) GetScopedRoleAssignment(ctx context.Context, name string) (*scopedaccessv1.ScopedRoleAssignment, error) {
+	res, err := c.ScopedAccessServiceClient().GetScopedRoleAssignment(ctx, &scopedaccessv1.GetScopedRoleAssignmentRequest{
+		Name: name,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return res.GetAssignment(), nil
+}
+
+// CreateScopedRoleAssignment creates a new scoped role assignment.
+func (c *Client) CreateScopedRoleAssignment(ctx context.Context, assignment *scopedaccessv1.ScopedRoleAssignment) (*scopedaccessv1.ScopedRoleAssignment, error) {
+	res, err := c.ScopedAccessServiceClient().CreateScopedRoleAssignment(ctx, &scopedaccessv1.CreateScopedRoleAssignmentRequest{
+		Assignment: assignment,
+	})
+	if err != nil {
+		return nil, trace.Wrap(err)
+	}
+	return res.GetAssignment(), nil
+}
+
+// UpsertScopedRoleAssignment is a placeholder that always returns not implemented.
+// ScopedRoleAssignment does not support updates. All mutable fields use RequiresReplace
+// in the Terraform schema, so Terraform will delete and recreate rather than calling this.
+func (c *Client) UpsertScopedRoleAssignment(ctx context.Context, assignment *scopedaccessv1.ScopedRoleAssignment) (*scopedaccessv1.ScopedRoleAssignment, error) {
+	return nil, trace.NotImplemented("UpsertScopedRoleAssignment is not implemented; ScopedRoleAssignment does not support updates")
+}
+
+// DeleteScopedRoleAssignment deletes a scoped role assignment by name.
+func (c *Client) DeleteScopedRoleAssignment(ctx context.Context, name string) error {
+	_, err := c.ScopedAccessServiceClient().DeleteScopedRoleAssignment(ctx, &scopedaccessv1.DeleteScopedRoleAssignmentRequest{
+		Name: name,
+	})
+	return trace.Wrap(err)
+}
+
 // AppAuthConfigClient returns an [appauthconfigv1.AppAuthConfigServiceClient].
 func (c *Client) AppAuthConfigClient() appauthconfigv1.AppAuthConfigServiceClient {
 	return appauthconfigv1.NewAppAuthConfigServiceClient(c.conn)

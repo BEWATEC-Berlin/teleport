@@ -289,6 +289,12 @@ const (
 	// KindScopedToken is a provisioning token resource
 	KindScopedToken = "scoped_token"
 
+	// KindScopedRole is a scoped role resource
+	KindScopedRole = "scoped_role"
+
+	// KindScopedRoleAssignment is a scoped role assignment resource
+	KindScopedRoleAssignment = "scoped_role_assignment"
+
 	// KindCertAuthority is a certificate authority resource
 	KindCertAuthority = "cert_authority"
 
