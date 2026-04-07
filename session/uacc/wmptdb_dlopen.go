@@ -19,6 +19,8 @@
 package uacc
 
 /*
+#cgo LDFLAGS: -ldl
+
 #include <dlfcn.h>
 #include <stdint.h>
 #include <stdlib.h>
