@@ -108,7 +108,7 @@ func Run(args []string) int {
 	ctx := context.Background()
 	ctx, _ = signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
 
-	app := libutils.InitCLIParser(autoupdate.BinaryName, appHelp).Interspersed(false)
+	app := libutils.InitCLIParser(autoupdate.BinaryName, appHelp, os.Stdout).Interspersed(false)
 	app.Flag("debug", "Verbose logging to stdout.").
 		Short('d').BoolVar(&ccfg.Debug)
 	app.Flag("log-format", "Controls the format of output logs. Can be `json` or `text`. Defaults to `text`.").

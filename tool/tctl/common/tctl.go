@@ -123,7 +123,7 @@ func TryRun(ctx context.Context, commands []CLICommand, args []string) error {
 	}
 
 	// app is the command line parser
-	app := utils.InitCLIParser("tctl", GlobalHelpString)
+	app := utils.InitCLIParser("tctl", GlobalHelpString, os.Stdout)
 
 	// Each command will add itself to the CLI parser.
 	for i := range commands {

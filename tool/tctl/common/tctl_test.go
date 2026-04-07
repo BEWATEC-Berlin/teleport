@@ -74,7 +74,7 @@ func BenchmarkInit(b *testing.B) {
 // method, to ensure that auth client not initialized in matching process,
 // so we don't require a client before command is executed.
 func TestCommandMatchBeforeAuthConnect(t *testing.T) {
-	app := utils.InitCLIParser("tctl", GlobalHelpString)
+	app := utils.InitCLIParser("tctl", GlobalHelpString, os.Stdout)
 	cfg := servicecfg.MakeDefaultConfig()
 	cfg.CircuitBreakerConfig = breaker.NoopBreakerConfig()
 

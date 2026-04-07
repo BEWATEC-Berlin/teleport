@@ -20,6 +20,7 @@ package cli
 
 import (
 	"log/slog"
+	"os"
 	"testing"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -33,7 +34,7 @@ import (
 )
 
 func buildMinimalKingpinApp(subcommandName string) (app *kingpin.Application, subcommand *kingpin.CmdClause) {
-	app = utils.InitCLIParser("tbot", "test").Interspersed(false)
+	app = utils.InitCLIParser("tbot", "test", os.Stdout).Interspersed(false)
 	subcommand = app.Command(subcommandName, "subcommand")
 
 	return

@@ -894,7 +894,7 @@ func Run(ctx context.Context, args []string, opts ...CliOption) error {
 	var cpuProfile, memProfile, traceProfile string
 
 	// configure CLI argument parser:
-	cf.kingpinApp = utils.InitCLIParser("tsh", "Teleport Command Line Client.").Interspersed(true)
+	cf.kingpinApp = utils.InitCLIParser("tsh", "Teleport Command Line Client.", os.Stdout).Interspersed(true)
 	app := cf.kingpinApp
 
 	app.Flag("login", "Remote host login.").Short('l').Envar(loginEnvVar).StringVar(&cf.NodeLogin)

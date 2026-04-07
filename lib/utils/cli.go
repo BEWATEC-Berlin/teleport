@@ -327,7 +327,7 @@ func Color(color int, v any) string {
 
 // InitCLIParser configures kingpin command line args parser with
 // some defaults common for all Teleport CLI tools
-func InitCLIParser(appName, appHelp string) (app *kingpin.Application) {
+func InitCLIParser(appName, appHelp string, usageWriter io.Writer) (app *kingpin.Application) {
 	app = kingpin.New(appName, appHelp)
 
 	// make all flags repeatable, this makes the CLI easier to use.
@@ -336,6 +336,9 @@ func InitCLIParser(appName, appHelp string) (app *kingpin.Application) {
 	// hide "--help" flag
 	app.HelpFlag.Hidden()
 	app.HelpFlag.NoEnvar()
+
+	// output --help output to stdout instead of stderr
+	app.UsageWriter(usageWriter)
 
 	// set our own help template
 	app.UsageFuncs(template.FuncMap{

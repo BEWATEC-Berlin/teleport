@@ -71,7 +71,7 @@ func runCommand(t require.TestingT, client *authclient.Client, cmd cliCommand, a
 	cfg := servicecfg.MakeDefaultConfig()
 	cfg.CircuitBreakerConfig = breaker.NoopBreakerConfig()
 
-	app := utils.InitCLIParser("tctl", GlobalHelpString)
+	app := utils.InitCLIParser("tctl", GlobalHelpString, os.Stdout)
 	cmd.Initialize(app, &tctlcfg.GlobalCLIFlags{}, cfg)
 
 	selectedCmd, err := app.Parse(args)

@@ -21,6 +21,7 @@ package common
 import (
 	"bytes"
 	"context"
+	"os"
 	"testing"
 	"time"
 
@@ -121,7 +122,7 @@ func runAutoUpdateCommand(t *testing.T, client *authclient.Client, args []string
 
 	cfg := servicecfg.MakeDefaultConfig()
 	cfg.CircuitBreakerConfig = breaker.NoopBreakerConfig()
-	app := utils.InitCLIParser("tctl", GlobalHelpString)
+	app := utils.InitCLIParser("tctl", GlobalHelpString, os.Stdout)
 	command.Initialize(app, &tctlcfg.GlobalCLIFlags{Insecure: true}, cfg)
 
 	selectedCmd, err := app.Parse(append([]string{"autoupdate"}, args...))

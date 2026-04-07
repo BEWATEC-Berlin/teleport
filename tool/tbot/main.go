@@ -63,7 +63,7 @@ func Run(args []string, stdout io.Writer) error {
 
 	var cpuProfile, memProfile, traceProfile, configureOutPath string
 
-	app := utils.InitCLIParser("tbot", appHelp).Interspersed(false)
+	app := utils.InitCLIParser("tbot", appHelp, os.Stdout).Interspersed(false)
 	globalCfg := cli.NewGlobalArgs(app)
 
 	// Miscellaneous args exposed globally but handled here.

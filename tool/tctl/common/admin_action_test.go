@@ -1258,7 +1258,7 @@ func runTestCase(t *testing.T, ctx context.Context, client *authclient.Client, t
 		})
 	}
 
-	app := utils.InitCLIParser("tctl", tctl.GlobalHelpString)
+	app := utils.InitCLIParser("tctl", tctl.GlobalHelpString, os.Stdout)
 	cfg := servicecfg.MakeDefaultConfig()
 	tc.cliCommand.Initialize(app, &tctlcfg.GlobalCLIFlags{}, cfg)
 

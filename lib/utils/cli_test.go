@@ -262,8 +262,7 @@ func TestFormatCertError(t *testing.T) {
 
 func TestInitCLIParser(t *testing.T) {
 	makeApp := func(usageWriter io.Writer) *kingpin.Application {
-		app := InitCLIParser("test", "some help message")
-		app.UsageWriter(usageWriter)
+		app := InitCLIParser("test", "some help message", usageWriter)
 		app.Terminate(func(int) {})
 
 		app.Command("hello", "Hello.")

@@ -85,7 +85,7 @@ func Run(options Options) (app *kingpin.Application, executedCommand string, con
 	// configure logger for a typical CLI scenario until configuration file is
 	// parsed
 	utils.InitLogger(utils.LoggingForDaemon, slog.LevelError)
-	app = utils.InitCLIParser("teleport", "Teleport unifies identities — humans, machines, and AI — with strong identity implementation to speed up engineering, improve resiliency against identity-based attacks, and secure AI in production infrastructure.")
+	app = utils.InitCLIParser("teleport", "Teleport unifies identities — humans, machines, and AI — with strong identity implementation to speed up engineering, improve resiliency against identity-based attacks, and secure AI in production infrastructure.", os.Stdout)
 
 	// define global flags:
 	var (
