@@ -75,6 +75,7 @@ type Config struct {
 	AppSession              services.AppSessionReader
 	Applications            services.Applications
 	Beams                   services.BeamReader
+	DelegationSessions      services.DelegationSessions
 	BotInstance             services.BotInstance
 	ClusterConfig           services.ClusterConfiguration
 	StaticScopedToken       services.StaticScopedTokenService
