@@ -266,6 +266,7 @@ func TestInitCLIParser(t *testing.T) {
 		app.Terminate(func(int) {})
 
 		app.Command("hello", "Hello.")
+		app.Command("very-long-command", "Very long command.")
 
 		create := app.Command("create", "Create.")
 		create.Command("box", "Box.")
@@ -274,6 +275,7 @@ func TestInitCLIParser(t *testing.T) {
 		start := app.Command("start", "Start.")
 		start.Command("legacy", "Legacy.").Default()
 		start.Command("workload-identity", "Workload identity.")
+
 		return app
 	}
 

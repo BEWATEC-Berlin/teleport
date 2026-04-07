@@ -345,7 +345,7 @@ func InitCLIParser(appName, appHelp string, usageWriter io.Writer) (app *kingpin
 		"CommandPrintfWidth": func(cmds []*kingpin.CmdModel) int {
 			cmdWidth := defaultCommandPrintfWidth
 			for _, cmd := range cmds {
-				cmdWidth = max(cmdWidth, len(cmd.FullCommand))
+				cmdWidth = max(cmdWidth, len(cmd.Name))
 			}
 			return cmdWidth
 		},
@@ -448,10 +448,10 @@ const defaultUsageTemplate = `{{define "FormatCommand" -}}
 {{end -}}
 
 {{define "FormatCommands" -}}
-{{- $cmdWidth := .FlattenedCommands | CommandPrintfWidth -}}
-{{range .FlattenedCommands -}}
+{{- $cmdWidth := .Commands | CommandPrintfWidth -}}
+{{range .Commands -}}
 {{if not .Hidden -}}
-{{"  "}}{{printf (printf "%%-%ds" $cmdWidth) .FullCommand}}{{if .Default}} (Default){{end}} {{ .Help }}
+{{"  "}}{{printf (printf "%%-%ds" $cmdWidth) .Name}}{{if .Default}} (Default){{end}} {{ .Help }}
 {{end -}}
 {{end -}}
 {{end -}}
