@@ -345,6 +345,9 @@ func InitCLIParser(appName, appHelp string, usageWriter io.Writer) (app *kingpin
 		"CommandPrintfWidth": func(cmds []*kingpin.CmdModel) int {
 			cmdWidth := defaultCommandPrintfWidth
 			for _, cmd := range cmds {
+				if cmd.Hidden {
+					continue
+				}
 				cmdWidth = max(cmdWidth, len(cmd.Name))
 			}
 			return cmdWidth
