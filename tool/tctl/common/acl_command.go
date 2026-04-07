@@ -98,7 +98,7 @@ func (c *ACLCommand) Initialize(app *kingpin.Application, _ *tctlcfg.GlobalCLIFl
 
 	c.summary = acl.Command("summary", "Show summary information for access lists, including their members and last review.")
 	c.summary.Arg("access-list-name", "The access list name to show summary for. If not provided, shows summary for all access lists.").StringVar(&c.accessListName)
-	c.summary.Flag("format", "Output format 'json'").Default(teleport.JSON).EnumVar(&c.format, teleport.JSON)
+	c.summary.Flag("format", "Output format 'yaml' or 'json'").Default(teleport.YAML).EnumVar(&c.format, teleport.YAML, teleport.JSON)
 	c.summary.Flag("review-only", "Show only access lists that are due for review within the next 2 weeks or past due. Defaults to true.").
 		Default("true"). // default to show only reviewable lists since the command can get expensive with many lists/members
 		BoolVar(&c.reviewOnly)
@@ -243,6 +243,8 @@ func (c *ACLCommand) Summary(ctx context.Context, client *authclient.Client) err
 	}
 
 	switch c.format {
+	case teleport.YAML:
+		return trace.Wrap(utils.WriteYAML(c.Stdout, entries))
 	case teleport.JSON:
 		return trace.Wrap(utils.WriteJSONArray(c.Stdout, entries))
 	}
