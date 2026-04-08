@@ -8708,10 +8708,9 @@ func (w *wrappedAuthClient) DevicesClient() devicepb.DeviceTrustServiceClient {
 }
 
 type proxyConfig struct {
-	minimalHandler         bool
-	devicesClientOverride  devicepb.DeviceTrustServiceClient
-	kubeProxy              bool
-	featureWatcherInterval time.Duration
+	minimalHandler        bool
+	devicesClientOverride devicepb.DeviceTrustServiceClient
+	kubeProxy             bool
 }
 
 type proxyOption func(cfg *proxyConfig)
@@ -8725,12 +8724,6 @@ func withDevicesClientOverride(c devicepb.DeviceTrustServiceClient) proxyOption 
 func withKubeProxy() proxyOption {
 	return func(cfg *proxyConfig) {
 		cfg.kubeProxy = true
-	}
-}
-
-func withFeatureWatcherInterval(interval time.Duration) proxyOption {
-	return func(cfg *proxyConfig) {
-		cfg.featureWatcherInterval = interval
 	}
 }
 
@@ -9049,7 +9042,6 @@ func createProxy(ctx context.Context, t *testing.T, proxyID string, node *regula
 		Modules:               m,
 		ClusterFeatures:       *m.TestFeatures.ToProto(),
 		InsecureMode:          insecureMode,
-		FeatureWatchInterval:  cfg.featureWatcherInterval,
 	}, SetClock(clock))
 	require.NoError(t, err)
 
