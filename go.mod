@@ -289,6 +289,8 @@ require (
 	software.sslmate.com/src/go-pkcs12 v0.6.0
 )
 
+require github.com/aws/aws-sdk-go-v2/feature/s3/transfermanager v0.1.15
+
 require (
 	cel.dev/expr v0.25.1 // indirect
 	cloud.google.com/go v0.123.0 // indirect
@@ -649,9 +651,3 @@ replace (
 	github.com/redis/go-redis/v9 => github.com/gravitational/redis/v9 v9.6.1-teleport.1
 	github.com/vulcand/predicate => github.com/gravitational/predicate v1.3.4
 )
-
-// this package was included in google.golang.org/grpc but because it's still
-// referenced by some dependencies we should exclude it here to avoid problems
-// when evaluating versions; "go get -u ./..." succeeding is a good sign that
-// the problem has been resolved
-exclude google.golang.org/grpc/stats/opentelemetry v0.0.0-20241028142157-ada6787961b3
