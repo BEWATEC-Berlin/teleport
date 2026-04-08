@@ -1398,7 +1398,18 @@ func newLeafCluster(srv *server, domainName string, sconn ssh.Conn) (*leafCluste
 
 	leaf.validatedMFAChallengeWatcher = validatedMFAChallengeWatcher
 
-	go leaf.runValidatedMFAChallengeSync(closeContext, mfaRetry)
+	go func() {
+		if err := leaf.runValidatedMFAChallengeSync(closeContext, mfaRetry); err != nil {
+			if err := srv.onClusterTunnelClose(&alwaysClose{Cluster: leaf}); err != nil {
+				srv.Logger.ErrorContext(
+					closeContext,
+					"Failed to clean up leaf cluster resources after runValidatedMFAChallengeSync loop exited",
+					"leaf_cluster", leaf.GetName(),
+					"error", err,
+				)
+			}
+		}
+	}()
 
 	return leaf, nil
 }
