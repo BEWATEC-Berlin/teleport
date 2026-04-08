@@ -26,7 +26,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"strings"
 	"sync"
 	"time"
@@ -48,7 +47,7 @@ type sftpSubsys struct {
 	logger *slog.Logger
 
 	fileTransferReq *srv.FileTransferRequest
-	sftpCmd         *exec.Cmd
+	sftpCmd         *srv.CommandExecutor
 	serverCtx       *srv.ServerContext
 
 	// waitForOutputStreams tracks goroutines that copy stderr/stdout from child
@@ -120,7 +119,7 @@ func (s *sftpSubsys) Start(ctx context.Context,
 		return trace.Wrap(err)
 	}
 
-	s.sftpCmd, err = srv.ConfigureCommand(serverCtx, chReadPipeOut, chWritePipeIn, auditPipeIn)
+	s.sftpCmd, err = serverCtx.ConfigureCommand(chReadPipeOut, chWritePipeIn, auditPipeIn)
 	if err != nil {
 		return trace.Wrap(err)
 	}
@@ -158,7 +157,9 @@ func (s *sftpSubsys) Start(ctx context.Context,
 	if err != nil {
 		return trace.Wrap(err)
 	}
-	execRequest.Continue()
+	if err := s.sftpCmd.Continue(); err != nil {
+		return trace.Wrap(err)
+	}
 
 	// Send the file transfer request if applicable. The SFTP process
 	// expects the file transfer request data will end with a null byte,

@@ -122,7 +122,7 @@ type localExec struct {
 	Command string
 
 	// Cmd holds an *exec.Cmd which will be used for local execution.
-	Cmd *exec.Cmd
+	Cmd *CommandExecutor
 
 	// Ctx holds the *ServerContext.
 	Ctx *ServerContext
@@ -180,7 +180,7 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 	e.Ctx.AddCloser(shellStderrR)
 
 	// Create the command that will actually execute.
-	e.Cmd, err = ConfigureCommand(e.Ctx, shellStdinR, shellStdoutW, shellStderrW)
+	e.Cmd, err = e.Ctx.ConfigureCommand(shellStdinR, shellStdoutW, shellStderrW)
 	if err != nil {
 		return nil, trace.Wrap(err)
 	}
@@ -226,12 +226,6 @@ func (e *localExec) Start(ctx context.Context, channel ssh.Channel) (*ExecResult
 			Code:    exitCode(err),
 		}, trace.ConvertSystemError(err)
 	}
-	// Close our half of the write pipe since it is only to be used by the child process.
-	// Not closing prevents being signaled when the child closes its half.
-	if err := e.Ctx.readyw.Close(); err != nil {
-		logger.WarnContext(ctx, "Failed to close parent process audit session ID signal write fd", "error", err)
-	}
-	e.Ctx.readyw = nil
 
 	// Save off the PID of the Teleport process under which the command is executing.
 	e.pid = e.Cmd.Process.Pid
@@ -294,7 +288,7 @@ func (e *localExec) ReadAuditSessionID() (uint32, error) {
 		return 0, nil
 	}
 
-	if err := e.Ctx.WaitForChild(e.Ctx.cancelContext); err != nil {
+	if err := e.Cmd.WaitForChild(); err != nil {
 		return 0, trace.Wrap(err)
 	}
 
@@ -305,10 +299,7 @@ func (e *localExec) ReadAuditSessionID() (uint32, error) {
 // pre-processing routine if Enhanced Session Recording is enabled.
 // Otherwise, this method is a no-op.
 func (e *localExec) Continue() {
-	e.Ctx.contw.Close()
-
-	// Set to nil so the close in the context doesn't attempt to re-close.
-	e.Ctx.contw = nil
+	e.Cmd.Continue()
 }
 
 // PID returns the PID of the Teleport process that was re-execed.
@@ -643,10 +634,165 @@ func exitCode(err error) int {
 	}
 }
 
+type CommandExecutor struct {
+	*exec.Cmd
+
+	ctx context.Context
+
+	// cmd{r,w} are used to send the command from the parent process to the
+	// child process.
+	cmdr *os.File
+	cmdw *os.File
+
+	// logw is used to send logs from the child process to the parent process.
+	logw *os.File
+
+	// cont{r,w} is used to send the continue signal from the parent process
+	// to the child process.
+	contr *os.File
+	contw *os.File
+
+	// ready{r,w} is used to send the ready signal from the child process
+	// to the parent process. If ESR is enabled, the child signals after
+	// the audit session login ID (auid) is received.
+	readyr *os.File
+	readyw *os.File
+
+	// killShell{r,w} are used to send kill signal to the child process
+	// to terminate the shell.
+	killShellr *os.File
+	killShellw *os.File
+
+	closers []io.Closer
+
+	bpfEnabled bool
+	logger     *slog.Logger
+}
+
+func (e *CommandExecutor) pipe() (*os.File, *os.File, error) {
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, nil, trace.Wrap(err)
+	}
+	e.closers = append(e.closers, r, w)
+	return r, w, nil
+}
+
+func (e *CommandExecutor) Close() error {
+	var errs []error
+	for _, closer := range e.closers {
+		if err := closer.Close(); err != nil && !errors.Is(err, os.ErrClosed) {
+			errs = append(errs, err)
+		}
+	}
+	return trace.NewAggregate(errs...)
+}
+
+func (e *CommandExecutor) Start() error {
+	if err := e.Cmd.Start(); err != nil {
+		return trace.Wrap(err)
+	}
+	// Close our halves of pipes that were passed to the child process
+	if err := e.cmdr.Close(); err != nil {
+		e.logger.WarnContext(e.ctx, "Failed to close parent process command read fd", "error", err)
+	}
+	if err := e.contr.Close(); err != nil {
+		e.logger.WarnContext(e.ctx, "Failed to close parent process continuation read fd", "error", err)
+	}
+	if err := e.readyw.Close(); err != nil {
+		e.logger.WarnContext(e.ctx, "Failed to close parent process audit session ID signal write fd", "error", err)
+	}
+	if err := e.killShellr.Close(); err != nil {
+		e.logger.WarnContext(e.ctx, "Failed to close parent process kill shell read fd", "error", err)
+	}
+	return nil
+}
+
+// The child does not signal until it completes PAM setup, which can take an arbitrary
+// amount of time, so we use a reasonably long timeout to avoid dubious lockouts.
+const childReadyWaitTimeout = 3 * time.Minute
+
+func (e *CommandExecutor) WaitForChild() error {
+	if !e.bpfEnabled {
+		return nil
+	}
+
+	var waitErr error
+	if waitErr = sessionreexec.WaitForSignal(e.ctx, e.readyr, childReadyWaitTimeout); waitErr != nil {
+		e.logger.ErrorContext(e.ctx, "Child process never became ready.", "error", waitErr)
+	}
+
+	closeErr := e.readyr.Close()
+	e.readyr = nil
+
+	return trace.NewAggregate(waitErr, closeErr)
+}
+
+// Continue will resume execution of the process after it completes its
+// pre-processing routine if Enhanced Session Recording is enabled.
+// Otherwise, this method is a no-op.
+func (e *CommandExecutor) Continue() error {
+	err := e.contw.Close()
+	e.contw = nil
+	return trace.Wrap(err)
+}
+
+// Kill will send signal to the child process that it should terminate the command
+func (e *CommandExecutor) Kill() error {
+	err := e.killShellw.Close()
+	e.killShellw = nil
+	return trace.Wrap(err)
+}
+
 // ConfigureCommand creates a command fully configured to execute. This
 // function is used by Teleport to re-execute itself and pass whatever data
 // is need to the child to actually execute the shell.
-func ConfigureCommand(ctx *ServerContext, extraFiles ...*os.File) (*exec.Cmd, error) {
+func ConfigureCommand(ctx context.Context, logger *slog.Logger, childLogWriter io.Writer, command *sessionreexec.ExecCommand, execType string, extraFiles ...*os.File) (executor *CommandExecutor, err error) {
+	executor = &CommandExecutor{
+		ctx:    ctx,
+		logger: logger,
+	}
+	defer func() {
+		if err != nil {
+			if closeErr := executor.Close(); closeErr != nil {
+				err = trace.NewAggregate(err, closeErr)
+			}
+			executor = nil
+		}
+	}()
+	if fileWriter, ok := childLogWriter.(*os.File); ok {
+		executor.logw = fileWriter
+	} else {
+		// Create a pipe so we can pass the writing side as an *os.File to the child process.
+		// Then we can copy from the reading side to the log writer (e.g. syslog, log file w/ concurrency protection).
+		r, w, err := executor.pipe()
+		if err != nil {
+			return nil, trace.Wrap(err)
+		}
+
+		executor.logw = w
+
+		// Copy logs from the child process to the parent process over
+		// the pipe until it is closed by the child context.
+		go func() {
+			if _, err := io.Copy(childLogWriter, r); err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, os.ErrClosed) {
+				slog.ErrorContext(ctx, "Failed to copy logs over pipe", "error", err)
+			}
+		}()
+	}
+	if executor.cmdr, executor.cmdw, err = executor.pipe(); err != nil {
+		return
+	}
+	if executor.contr, executor.contw, err = executor.pipe(); err != nil {
+		return
+	}
+	if executor.killShellr, executor.killShellw, err = executor.pipe(); err != nil {
+		return
+	}
+	if executor.readyr, executor.readyw, err = executor.pipe(); err != nil {
+		return
+	}
+
 	// Create a os.Pipe and start copying over the payload to execute. While the
 	// pipe buffer is quite large (64k) some users have run into the pipe
 	// blocking writes on much smaller buffers (7k) leading to Teleport being
@@ -660,12 +806,7 @@ func ConfigureCommand(ctx *ServerContext, extraFiles ...*os.File) (*exec.Cmd, er
 	// See the below for details.
 	//
 	//   https://man7.org/linux/man-pages/man7/pipe.7.html
-	cmdmsg, err := ctx.ExecCommand()
-	if err != nil {
-		return nil, trace.Wrap(err)
-	}
-
-	go copyCommand(ctx.CancelContext(), ctx.cmdw, cmdmsg)
+	go copyCommand(ctx, executor.cmdw, command)
 
 	// Find the Teleport executable and its directory on disk.
 	executable, err := os.Executable()
@@ -675,7 +816,7 @@ func ConfigureCommand(ctx *ServerContext, extraFiles ...*os.File) (*exec.Cmd, er
 
 	// The channel/request type determines the subcommand to execute.
 	var subCommand string
-	switch ctx.ExecType {
+	switch execType {
 	case reexecconstants.NetworkingSubCommand:
 		subCommand = reexecconstants.NetworkingSubCommand
 	default:
@@ -690,28 +831,30 @@ func ConfigureCommand(ctx *ServerContext, extraFiles ...*os.File) (*exec.Cmd, er
 	env := &envutils.SafeEnv{}
 	env.AddExecEnvironment()
 
+	executor.bpfEnabled = command.RecordWithBPF
+
 	// Build the "teleport exec" command.
-	cmd := &exec.Cmd{
+	executor.Cmd = &exec.Cmd{
 		Path: executable,
 		Args: args,
 		Env:  *env,
 		ExtraFiles: []*os.File{
-			ctx.cmdr,
-			ctx.logw,
-			ctx.contr,
-			ctx.readyw,
-			ctx.killShellr,
+			executor.cmdr,
+			executor.logw,
+			executor.contr,
+			executor.readyw,
+			executor.killShellr,
 		},
 	}
 	// Add extra files if applicable.
 	if len(extraFiles) > 0 {
-		cmd.ExtraFiles = append(cmd.ExtraFiles, extraFiles...)
+		executor.ExtraFiles = append(executor.ExtraFiles, extraFiles...)
 	}
 
 	// Perform OS-specific tweaks to the command.
-	sessionreexec.CommandOSTweaks(cmd)
+	sessionreexec.CommandOSTweaks(executor.Cmd)
 
-	return cmd, nil
+	return executor, nil
 }
 
 // copyCommand will copy the provided command to the child process over the
