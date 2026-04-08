@@ -8089,7 +8089,6 @@ func (a *Server) mfaAuthChallenge(ctx context.Context, user, clientRedirectURL, 
 			mfatypes.BeginBrowserMFAChallengeParams{
 				User:                     user,
 				BrowserMFATSHRedirectURL: clientRedirectURL,
-				ProxyAddress:             proxyAddress,
 				Ext:                      challengeExtensions,
 			},
 		); err != nil {
