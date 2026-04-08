@@ -182,6 +182,7 @@ func NewAccessRequestWithResources(name string, user string, roles []string, res
 }
 
 // IsEqual determines if two access requests are equivalent to one another.
+// The Revision field is ignored during comparison.
 func (r *AccessRequestV3) IsEqual(other AccessRequest) bool {
 	if r == nil && other == nil {
 		return true
