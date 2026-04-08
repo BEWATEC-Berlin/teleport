@@ -237,7 +237,7 @@ func TestAccessRequestV3IsEqual(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "both nil",
+			name: "both nil interface",
 			a: func(t *testing.T) AccessRequest {
 				var r *AccessRequestV3
 				return r
@@ -248,12 +248,33 @@ func TestAccessRequestV3IsEqual(t *testing.T) {
 			want: true,
 		},
 		{
-			name: "nil vs populated",
+			name: "both typed nil",
+			a: func(t *testing.T) AccessRequest {
+				var r *AccessRequestV3
+				return r
+			},
+			b: func(t *testing.T) AccessRequest {
+				var r *AccessRequestV3
+				return r
+			},
+			want: true,
+		},
+		{
+			name: "typed nil vs populated",
 			a: func(t *testing.T) AccessRequest {
 				var r *AccessRequestV3
 				return r
 			},
 			b:    func(t *testing.T) AccessRequest { return newReq(t) },
+			want: false,
+		},
+		{
+			name: "populated vs typed nil",
+			a:    func(t *testing.T) AccessRequest { return newReq(t) },
+			b: func(t *testing.T) AccessRequest {
+				var r *AccessRequestV3
+				return r
+			},
 			want: false,
 		},
 		{

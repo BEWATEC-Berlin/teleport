@@ -193,6 +193,10 @@ func (r *AccessRequestV3) IsEqual(other AccessRequest) bool {
 		return false
 	}
 
+	if r == nil && otherv3 == nil {
+		return true
+	}
+
 	if !deriveTeleportEqualAccessRequestV3(r, otherv3) {
 		return false
 	}
