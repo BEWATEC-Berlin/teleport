@@ -4314,12 +4314,14 @@ func (a *Server) CreateAuthenticateChallenge(ctx context.Context, req *proto.Cre
 	}
 
 	// If a BrowserMFARequestID is provided, look up the request and apply its challenge extensions.
+	var browserMFAReq *services.MFASessionData
 	if req.BrowserMFARequestID != "" {
 		if req.ChallengeExtensions != nil {
 			return nil, trace.BadParameter("challenge extensions must not be set when a browser MFA request ID is provided")
 		}
 
-		browserMFAReq, err := a.GetMFASession(ctx, req.BrowserMFARequestID)
+		var err error
+		browserMFAReq, err = a.GetMFASession(ctx, req.BrowserMFARequestID)
 		if err != nil {
 			a.logger.WarnContext(ctx, "Failed to read MFA session for browser MFA request", "error", err)
 			return nil, trace.AccessDenied("invalid browser MFA request")
@@ -4398,6 +4400,17 @@ func (a *Server) CreateAuthenticateChallenge(ctx context.Context, req *proto.Cre
 		if err != nil {
 			return nil, trace.Wrap(err)
 		}
+	}
+
+	if browserMFAReq != nil && browserMFAReq.Username != username {
+		a.logger.WarnContext(
+			ctx,
+			"Stored username in MFA session does not match requestor's username",
+			"request_id", req.BrowserMFARequestID,
+			"session_username", browserMFAReq.Username,
+			"requestor_username", username,
+		)
+		return nil, trace.AccessDenied("invalid browser MFA request")
 	}
 
 	// When completing a Browser MFA flow, only a WebAuthn challenge is needed, so
