@@ -182,7 +182,7 @@ endif
 		-I=../../api/proto \
 		-I=$(PROTOBUF_MOD_PATH) \
 		--plugin=$(PROTOC_GEN_TERRAFORM) \
-		--terraform_out=config=protoc-gen-terraform-scopedaccess.yaml:./tfschema \
+		--terraform_out=config=protoc-gen-terraform-scopedrole.yaml:./tfschema \
 		teleport/scopes/access/v1/role.proto
 
 	@protoc \
