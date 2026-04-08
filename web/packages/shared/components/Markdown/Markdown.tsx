@@ -248,6 +248,15 @@ function parseListItems(
   let i = startIndex;
 
   while (i < lines.length) {
+    // Skip blank lines between sibling list items so that
+    // blank-line-separated children stay in the same nested list.
+    while (i < lines.length && lines[i].trim() === '') {
+      i += 1;
+    }
+    if (i >= lines.length) {
+      break;
+    }
+
     const raw = lines[i];
     const trimmed = raw.trimStart();
 
@@ -283,6 +292,7 @@ function parseListItems(
       if (
         nextTrimmed === '' ||
         isListItem(nextTrimmed) ||
+        fencedCodeRegex.test(nextTrimmed) ||
         nextIndent <= baseIndent
       ) {
         // If the next line is blank, a new list item, or less indented than the base,
