@@ -133,8 +133,6 @@ type payload struct {
 	WithoutImportState bool
 	// StatePoll optionally configures polling for state changes when creating or updating resources.
 	StatePoll *statePoll
-	// ClientOverride sets a different client from main client to use for the resource.
-	ClientOverride string
 }
 
 // statePoll configures polling for state changes when creating or updating resources.
