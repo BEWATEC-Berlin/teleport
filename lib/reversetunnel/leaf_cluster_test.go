@@ -23,6 +23,7 @@ import (
 	"log/slog"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
@@ -44,251 +45,271 @@ import (
 func TestRunValidatedMFAChallengeSync_Success(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-
-	chal := newValidatedMFAChallenge(clock, "challenge-for-leaf")
-
-	leafMFAClient := newMockMFAServiceClient()
-	leafMFAClient.attempts = make(chan struct{}, 2)
-
-	leaf := newLeafClusterWithMFAWatcher(t, clock, leafMFAClient, chal)
-
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Millisecond)
-	t.Cleanup(cancel)
-
-	errC := startValidatedMFAChallengeSync(
+	synctest.Test(
 		t,
-		leaf,
-		ctx,
-		newRetryConfig(clock, time.Millisecond),
+		func(t *testing.T) {
+			chal := newValidatedMFAChallenge("challenge-for-leaf")
+
+			leafMFAClient := newMockMFAServiceClient()
+			leafMFAClient.attempts = make(chan struct{}, 2)
+
+			leaf := newLeafClusterWithMFAWatcher(t, leafMFAClient, chal)
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+			t.Cleanup(cancel)
+
+			errC := startValidatedMFAChallengeSync(
+				t,
+				leaf,
+				ctx,
+				newRetryConfig(time.Nanosecond),
+			)
+
+			waitForAttempt(t, ctx, leafMFAClient.attempts)
+
+			cancel()
+			require.NoError(t, <-errC)
+			assertReplicatedChallenges(t, leafMFAClient, chal)
+		},
 	)
-
-	waitForAttempt(t, ctx, leafMFAClient.attempts)
-
-	cancel()
-	require.NoError(t, <-errC)
-	assertReplicatedChallenges(t, leafMFAClient, chal)
 }
 
 func TestRunValidatedMFAChallengeSync_RetriesFailedChallenges(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-
-	chal := newValidatedMFAChallenge(clock, "challenge-for-leaf")
-
-	leafMFAClient := newMockMFAServiceClient()
-	leafMFAClient.attempts = make(chan struct{}, 2)
-	leafMFAClient.errByName[chal.GetMetadata().GetName()] = []error{
-		trace.ConnectionProblem(nil, "some transient error"),
-		nil,
-	}
-
-	leaf := newLeafClusterWithMFAWatcher(t, clock, leafMFAClient, chal)
-
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	t.Cleanup(cancel)
-
-	errC := startValidatedMFAChallengeSync(
+	synctest.Test(
 		t,
-		leaf,
-		ctx,
-		newRetryConfig(clock, time.Millisecond),
+		func(t *testing.T) {
+			chal := newValidatedMFAChallenge("challenge-for-leaf")
+
+			leafMFAClient := newMockMFAServiceClient()
+			leafMFAClient.attempts = make(chan struct{}, 2)
+			leafMFAClient.errByName[chal.GetMetadata().GetName()] = []error{
+				trace.ConnectionProblem(nil, "some transient error"),
+				nil,
+			}
+
+			leaf := newLeafClusterWithMFAWatcher(t, leafMFAClient, chal)
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+			t.Cleanup(cancel)
+
+			errC := startValidatedMFAChallengeSync(
+				t,
+				leaf,
+				ctx,
+				newRetryConfig(time.Nanosecond),
+			)
+
+			waitForAttempt(t, ctx, leafMFAClient.attempts)
+
+			time.Sleep(time.Nanosecond)
+			synctest.Wait()
+
+			waitForAttempt(t, ctx, leafMFAClient.attempts)
+
+			cancel()
+			require.NoError(t, <-errC)
+			require.Len(t, leafMFAClient.Requests(), 2)
+		},
 	)
-
-	waitForAttempt(t, ctx, leafMFAClient.attempts)
-
-	advanceRetry(t, ctx, clock, time.Millisecond)
-
-	waitForAttempt(t, ctx, leafMFAClient.attempts)
-
-	cancel()
-	require.NoError(t, <-errC)
-	require.Len(t, leafMFAClient.Requests(), 2)
 }
 
 func TestRunValidatedMFAChallengeSync_UsesLatestDesiredState(t *testing.T) {
 	t.Parallel()
 
-	clock := clockwork.NewFakeClock()
-
-	stale := newValidatedMFAChallenge(clock, "stale-challenge")
-	fresh := newValidatedMFAChallenge(clock, "fresh-challenge")
-
-	staleAttemptStarted := make(chan struct{})
-	releaseStaleAttempt := make(chan struct{})
-	freshAttempted := make(chan struct{}, 1)
-	var blockStaleAttempt sync.Once
-
-	leafMFAClient := newMockMFAServiceClient()
-	leafMFAClient.errByName[stale.GetMetadata().GetName()] = []error{
-		trace.ConnectionProblem(nil, "replication failed"),
-	}
-	leafMFAClient.beforeReply = func(req *mfav1.ReplicateValidatedMFAChallengeRequest) {
-		switch req.GetName() {
-		case stale.GetMetadata().GetName():
-			// Block the sync loop's attempt to replicate the stale challenge until we've observed that it attempted to
-			// replicate the fresh challenge.
-			blockStaleAttempt.Do(func() {
-				close(staleAttemptStarted)
-				<-releaseStaleAttempt
-			})
-
-		case fresh.GetMetadata().GetName():
-			// Unblock the stale attempt once we've observed an attempt to replicate the fresh challenge, which indicates
-			// that the sync loop has read the fresh challenge from the watcher and is attempting to replicate it.
-			freshAttempted <- struct{}{}
-		}
-	}
-
-	leaf := newLeafClusterWithMFAWatcher(t, clock, leafMFAClient, stale)
-
-	ctx, cancel := context.WithCancel(t.Context())
-	t.Cleanup(cancel)
-
-	errC := startValidatedMFAChallengeSync(
+	synctest.Test(
 		t,
-		leaf,
-		ctx,
-		newRetryConfig(clock, time.Millisecond),
+		func(t *testing.T) {
+			stale := newValidatedMFAChallenge("stale-challenge")
+			fresh := newValidatedMFAChallenge("fresh-challenge")
+
+			staleAttemptStarted := make(chan struct{})
+			releaseStaleAttempt := make(chan struct{})
+			freshAttempted := make(chan struct{}, 1)
+			var blockStaleAttempt sync.Once
+
+			leafMFAClient := newMockMFAServiceClient()
+			leafMFAClient.errByName[stale.GetMetadata().GetName()] = []error{
+				trace.ConnectionProblem(nil, "replication failed"),
+			}
+			leafMFAClient.beforeReply = func(req *mfav1.ReplicateValidatedMFAChallengeRequest) {
+				switch req.GetName() {
+				case stale.GetMetadata().GetName():
+					// Block the sync loop's attempt to replicate the stale challenge until we've observed that it attempted
+					// to replicate the fresh challenge.
+					blockStaleAttempt.Do(func() {
+						close(staleAttemptStarted)
+						<-releaseStaleAttempt
+					})
+
+				case fresh.GetMetadata().GetName():
+					// Unblock the stale attempt once we've observed an attempt to replicate the fresh challenge, which
+					// indicates that the sync loop has read the fresh challenge from the watcher and is attempting to
+					// replicate it.
+					freshAttempted <- struct{}{}
+				}
+			}
+
+			leaf := newLeafClusterWithMFAWatcher(t, leafMFAClient, stale)
+
+			ctx, cancel := context.WithCancel(t.Context())
+			t.Cleanup(cancel)
+
+			errC := startValidatedMFAChallengeSync(
+				t,
+				leaf,
+				ctx,
+				newRetryConfig(time.Nanosecond),
+			)
+
+			// Wait for the sync loop to attempt to replicate the stale challenge, which indicates that it has read the
+			// stale challenge from the watcher and is attempting to replicate it.
+			<-staleAttemptStarted
+
+			// Update the watcher's state to include the fresh challenge and wait for the sync loop to attempt to replicate
+			// it.
+			leaf.validatedMFAChallengeWatcher.ResourcesC <- []*mfav1.ValidatedMFAChallenge{fresh}
+			close(releaseStaleAttempt)
+
+			// We should observe an attempt to replicate the fresh challenge, which indicates that the sync loop has read
+			// the fresh challenge from the watcher and is attempting to replicate it.
+			<-freshAttempted
+
+			cancel()
+			require.NoError(t, <-errC)
+			assertReplicatedChallenges(t, leafMFAClient, stale, fresh)
+		},
 	)
-
-	// Wait for the sync loop to attempt to replicate the stale challenge, which indicates that it has read the stale
-	// challenge from the watcher and is attempting to replicate it.
-	<-staleAttemptStarted
-
-	// Update the watcher's state to include the fresh challenge and wait for the sync loop to attempt to replicate it.
-	leaf.validatedMFAChallengeWatcher.ResourcesC <- []*mfav1.ValidatedMFAChallenge{fresh}
-	close(releaseStaleAttempt)
-
-	// We should observe an attempt to replicate the fresh challenge, which indicates that the sync loop has read the
-	// fresh challenge from the watcher and is attempting to replicate it.
-	<-freshAttempted
-
-	cancel()
-	require.NoError(t, <-errC)
-	assertReplicatedChallenges(t, leafMFAClient, stale, fresh)
 }
 
 func TestSyncValidatedMFAChallenges_Success(t *testing.T) {
 	t.Parallel()
 
-	leafMFAClient := newMockMFAServiceClient()
+	synctest.Test(
+		t,
+		func(t *testing.T) {
+			leafMFAClient := newMockMFAServiceClient()
 
-	clock := clockwork.NewFakeClock()
+			leaf := newLeafClusterForSyncTest(leafMFAClient)
 
-	leaf := newLeafClusterForSyncTest(clock, leafMFAClient)
+			chal := newValidatedMFAChallenge("challenge")
 
-	chal := newValidatedMFAChallenge(clock, "challenge")
-
-	failed := leaf.syncValidatedMFAChallenges(
-		t.Context(),
-		newValidatedMFAChallengeSet(
-			chal,
-		),
+			failed := leaf.syncValidatedMFAChallenges(
+				t.Context(),
+				newValidatedMFAChallengeSet(
+					chal,
+				),
+			)
+			require.Empty(t, failed)
+			assertReplicatedChallenges(t, leafMFAClient, chal)
+		},
 	)
-	require.Empty(t, failed)
-	assertReplicatedChallenges(t, leafMFAClient, chal)
 }
 
 func TestSyncValidatedMFAChallenges_IgnoresAlreadyExistsAndReturnsFailures(t *testing.T) {
 	t.Parallel()
 
-	leafMFAClient := newMockMFAServiceClient()
-
-	clock := clockwork.NewFakeClock()
-
-	leaf := newLeafClusterForSyncTest(clock, leafMFAClient)
-
-	existing := newValidatedMFAChallenge(clock, "already-exists")
-	failing := newValidatedMFAChallenge(clock, "fails")
-
-	leafMFAClient.errByName[existing.GetMetadata().GetName()] = []error{trace.AlreadyExists("already exists")}
-	leafMFAClient.errByName[failing.GetMetadata().GetName()] = []error{trace.ConnectionProblem(nil, "replication failed")}
-
-	failed := leaf.syncValidatedMFAChallenges(
-		t.Context(),
-		newValidatedMFAChallengeSet(
-			existing,
-			failing,
-		),
-	)
-
-	require.Equal(
+	synctest.Test(
 		t,
-		newValidatedMFAChallengeSet(
-			failing,
-		),
-		failed,
+		func(t *testing.T) {
+			leafMFAClient := newMockMFAServiceClient()
+
+			leaf := newLeafClusterForSyncTest(leafMFAClient)
+
+			existing := newValidatedMFAChallenge("already-exists")
+			failing := newValidatedMFAChallenge("fails")
+
+			leafMFAClient.errByName[existing.GetMetadata().GetName()] = []error{trace.AlreadyExists("already exists")}
+			leafMFAClient.errByName[failing.GetMetadata().GetName()] = []error{trace.ConnectionProblem(nil, "replication failed")}
+
+			failed := leaf.syncValidatedMFAChallenges(
+				t.Context(),
+				newValidatedMFAChallengeSet(
+					existing,
+					failing,
+				),
+			)
+
+			require.Equal(
+				t,
+				failed,
+				newValidatedMFAChallengeSet(
+					failing,
+				),
+			)
+			require.Len(t, leafMFAClient.Requests(), 2)
+		},
 	)
-	require.Len(t, leafMFAClient.Requests(), 2)
 }
 
 func TestSyncValidatedMFAChallenges_SkipsExpiredChallenges(t *testing.T) {
 	t.Parallel()
 
-	leafMFAClient := newMockMFAServiceClient()
+	synctest.Test(
+		t,
+		func(t *testing.T) {
+			leafMFAClient := newMockMFAServiceClient()
 
-	clock := clockwork.NewFakeClock()
+			leaf := newLeafClusterForSyncTest(leafMFAClient)
 
-	leaf := newLeafClusterForSyncTest(clock, leafMFAClient)
+			expired := newValidatedMFAChallenge("expired")
+			expired.GetMetadata().SetExpiry(time.Now().Add(expiredValidatedMFAChallengeGracePeriod).Add(-time.Nanosecond))
 
-	expired := newValidatedMFAChallenge(clock, "expired")
-	expired.GetMetadata().SetExpiry(clock.Now().Add(expiredValidatedMFAChallengeGracePeriod).Add(-time.Second))
+			failed := leaf.syncValidatedMFAChallenges(
+				t.Context(),
+				newValidatedMFAChallengeSet(expired),
+			)
 
-	failed := leaf.syncValidatedMFAChallenges(
-		t.Context(),
-		newValidatedMFAChallengeSet(expired),
+			require.Empty(t, failed)
+			require.Empty(t, leafMFAClient.Requests())
+		},
 	)
-
-	require.Empty(t, failed)
-	require.Empty(t, leafMFAClient.Requests())
 }
 
 func TestRunValidatedMFAChallengeSync_DropsExpiredFailedChallenges(t *testing.T) {
 	t.Parallel()
 
-	const (
-		retryDelay     = time.Millisecond
-		initialExpiry  = -time.Millisecond
-		advancePastTTL = time.Minute + time.Millisecond + retryDelay
-	)
-
-	clock := clockwork.NewFakeClock()
-
-	expired := newValidatedMFAChallenge(clock, "challenge-for-leaf")
-	expired.GetMetadata().SetExpiry(clock.Now().Add(initialExpiry))
-
-	leafMFAClient := newMockMFAServiceClient()
-	leafMFAClient.attempts = make(chan struct{}, 2)
-	leafMFAClient.errByName[expired.GetMetadata().GetName()] = []error{
-		trace.ConnectionProblem(nil, "some transient error"),
-	}
-
-	leaf := newLeafClusterWithMFAWatcher(t, clock, leafMFAClient, expired)
-
-	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-	t.Cleanup(cancel)
-
-	errC := startValidatedMFAChallengeSync(
+	synctest.Test(
 		t,
-		leaf,
-		ctx,
-		newRetryConfig(clock, retryDelay),
+		func(t *testing.T) {
+			expired := newValidatedMFAChallenge("challenge-for-leaf")
+			expired.GetMetadata().SetExpiry(time.Now().Add(expiredValidatedMFAChallengeGracePeriod + time.Nanosecond))
+
+			leafMFAClient := newMockMFAServiceClient()
+			leafMFAClient.attempts = make(chan struct{}, 2)
+			leafMFAClient.errByName[expired.GetMetadata().GetName()] = []error{
+				trace.ConnectionProblem(nil, "some transient error"),
+			}
+
+			leaf := newLeafClusterWithMFAWatcher(t, leafMFAClient, expired)
+
+			ctx, cancel := context.WithTimeout(t.Context(), time.Millisecond)
+			t.Cleanup(cancel)
+
+			const retryDelay = 2 * time.Nanosecond
+
+			errC := startValidatedMFAChallengeSync(
+				t,
+				leaf,
+				ctx,
+				newRetryConfig(retryDelay),
+			)
+
+			waitForAttempt(t, ctx, leafMFAClient.attempts)
+
+			time.Sleep(retryDelay)
+			synctest.Wait()
+
+			cancel()
+			require.NoError(t, <-errC)
+			require.Len(t, leafMFAClient.Requests(), 1)
+		},
 	)
-
-	waitForAttempt(t, ctx, leafMFAClient.attempts)
-
-	advanceRetry(t, ctx, clock, advancePastTTL)
-
-	cancel()
-	require.NoError(t, <-errC)
-	require.Len(t, leafMFAClient.Requests(), 1)
 }
 
 func newLeafClusterWithMFAWatcher(
 	t *testing.T,
-	clock *clockwork.FakeClock,
 	mfaClient mfav1.MFAServiceClient,
 	challenges ...*mfav1.ValidatedMFAChallenge,
 ) *leafCluster {
@@ -309,7 +330,7 @@ func newLeafClusterWithMFAWatcher(
 			ResourceKind: types.KindValidatedMFAChallenge,
 			ResourceWatcherConfig: services.ResourceWatcherConfig{
 				Component: "Watcher on the Wall",
-				Clock:     clock,
+				Clock:     clockwork.NewRealClock(),
 				Client: &mockEvents{
 					watcher: &mockMFAWatcher{
 						events: events,
@@ -337,20 +358,19 @@ func newLeafClusterWithMFAWatcher(
 	return &leafCluster{
 		domainName:                   "leaf.example.com",
 		logger:                       slog.Default(),
-		clock:                        clock,
+		clock:                        clockwork.NewRealClock(),
 		leafClient:                   &mockLeafClient{mfaClient: mfaClient},
 		validatedMFAChallengeWatcher: watcher,
 	}
 }
 
 func newLeafClusterForSyncTest(
-	clock *clockwork.FakeClock,
 	mfaClient mfav1.MFAServiceClient,
 ) *leafCluster {
 	return &leafCluster{
 		domainName: "leaf.example.com",
 		logger:     slog.Default(),
-		clock:      clock,
+		clock:      clockwork.NewRealClock(),
 		leafClient: &mockLeafClient{mfaClient: mfaClient},
 	}
 }
@@ -372,12 +392,11 @@ func startValidatedMFAChallengeSync(
 	return errC
 }
 
-func newRetryConfig(clock *clockwork.FakeClock, delay time.Duration) retryutils.LinearConfig {
+func newRetryConfig(delay time.Duration) retryutils.LinearConfig {
 	return retryutils.LinearConfig{
 		First: delay,
 		Step:  delay,
 		Max:   delay,
-		Clock: clock,
 	}
 }
 
@@ -390,13 +409,6 @@ func waitForAttempt(t *testing.T, ctx context.Context, attempts <-chan struct{})
 
 	case <-attempts:
 	}
-}
-
-func advanceRetry(t *testing.T, ctx context.Context, clock *clockwork.FakeClock, delay time.Duration) {
-	t.Helper()
-
-	require.NoError(t, clock.BlockUntilContext(ctx, 1))
-	clock.Advance(delay)
 }
 
 func assertReplicatedChallenges(
@@ -413,8 +425,8 @@ func assertReplicatedChallenges(
 
 	require.Empty(
 		t,
-		cmp.Diff(wantReqs, client.Requests()),
-		"replicated challenges mismatch (-want +got)",
+		cmp.Diff(client.Requests(), wantReqs),
+		"replicated challenges mismatch (-got +want)",
 	)
 }
 
@@ -430,8 +442,8 @@ func replicateValidatedMFAChallengeRequest(
 	}
 }
 
-func newValidatedMFAChallenge(clock *clockwork.FakeClock, name string) *mfav1.ValidatedMFAChallenge {
-	expires := clock.Now().Add(local.ValidatedMFAChallengeExpiry)
+func newValidatedMFAChallenge(name string) *mfav1.ValidatedMFAChallenge {
+	expires := time.Now().Add(local.ValidatedMFAChallengeExpiry)
 
 	return &mfav1.ValidatedMFAChallenge{
 		Kind:    types.KindValidatedMFAChallenge,
