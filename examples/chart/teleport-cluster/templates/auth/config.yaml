@@ -257,7 +257,7 @@ data:
             verbs:
               - list
               - create
-              - read
+              - readnosecrets
               - update
               - delete
       deny: {}
