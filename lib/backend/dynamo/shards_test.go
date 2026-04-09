@@ -495,7 +495,8 @@ func (w *eventWriter) writeWithRetry(ctx context.Context, item backend.Item, par
 			}
 
 			if trace.IsCompareFailed(err) {
-				return nil // Skip retries and consider this item as successfully written.
+				// Already exists, retrying would not help, skip this item.
+				return err
 			}
 
 			// When heavily throttled this operation can return [types.InternalServerError] with "Internal Server Error" message.
