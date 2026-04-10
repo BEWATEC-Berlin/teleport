@@ -20,6 +20,8 @@ jobs:
   build-debs:
     name: Build OSS deb packages
     runs-on: ${{ matrix.runs_on }}
+    env:
+      GOCACHE: ${{ runner.temp }}/go-cache
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +53,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ inputs.version }}
         run: |
+          mkdir -p "${GOCACHE}"
           cd build.assets
           make release-centos7 ARCH=${ARCH} VERSION=${VERSION}
 
