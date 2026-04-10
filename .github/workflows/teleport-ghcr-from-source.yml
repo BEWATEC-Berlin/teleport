@@ -103,6 +103,8 @@ jobs:
           ls -lah .
           test -f "teleport_${{ inputs.version }}_amd64.deb"
           test -f "teleport_${{ inputs.version }}_arm64.deb"
+          cp build.assets/charts/fetch-debs ./fetch-debs
+          chmod +x ./fetch-debs
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
