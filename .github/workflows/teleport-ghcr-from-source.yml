@@ -19,11 +19,15 @@ env:
 jobs:
   build-debs:
     name: Build OSS deb packages
-    runs-on: ubuntu-22.04
+    runs-on: ${{ matrix.runs_on }}
     strategy:
       fail-fast: false
       matrix:
-        arch: [amd64, arm64]
+        include:
+          - arch: amd64
+            runs_on: ubuntu-22.04
+          - arch: arm64
+            runs_on: ubuntu-22.04-arm
 
     steps:
       - name: Checkout
@@ -45,9 +49,10 @@ jobs:
       - name: Build OSS release artifacts
         env:
           ARCH: ${{ matrix.arch }}
+          VERSION: ${{ inputs.version }}
         run: |
-          make clean
-          make release OS=linux ARCH=${ARCH}
+          cd build.assets
+          make release-centos7 ARCH=${ARCH} VERSION=${VERSION}
 
       - name: Collect deb artifact
         env:
