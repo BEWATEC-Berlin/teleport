@@ -43,6 +43,11 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Preload FPM image
+        run: |
+          docker pull ghcr.io/gravitational/fpm:debian12-1.15.1-1
+          docker tag ghcr.io/gravitational/fpm:debian12-1.15.1-1 public.ecr.aws/gravitational/fpm:debian12-1.15.1-1
+
       - name: Build OSS deb package
         env:
           ARCH: ${{ matrix.arch }}
