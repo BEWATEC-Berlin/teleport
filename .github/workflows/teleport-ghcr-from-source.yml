@@ -43,19 +43,13 @@ jobs:
       - name: Set up Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build buildbox image needed for packaging
-        run: |
-          cd build.assets
-          make buildbox-centos7
-
-      - name: Build OSS release artifacts
+      - name: Build OSS deb package
         env:
           ARCH: ${{ matrix.arch }}
           VERSION: ${{ inputs.version }}
         run: |
           mkdir -p "${GOCACHE}"
-          cd build.assets
-          make release-centos7 ARCH=${ARCH} VERSION=${VERSION}
+          make image ARCH=${ARCH} VERSION=${VERSION}
 
       - name: Collect deb artifact
         env:
