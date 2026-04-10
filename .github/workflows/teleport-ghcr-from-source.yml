@@ -21,7 +21,7 @@ jobs:
     name: Build OSS deb packages
     runs-on: ${{ matrix.runs_on }}
     env:
-      GOCACHE: ${{ runner.temp }}/go-cache
+      GOCACHE: /tmp/go-cache
     strategy:
       fail-fast: false
       matrix:
